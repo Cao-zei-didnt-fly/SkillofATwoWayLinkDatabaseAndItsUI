@@ -1,0 +1,97 @@
+{
+  "name": "link-garden",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "agent": "node src/cli.js",
+    "desktop": "electron .",
+    "build:win": "npm run build:web && node scripts/prepare-installer.mjs && electron-builder --win nsis --x64",
+    "test:desktop": "electron scripts/smoke-desktop.cjs",
+    "mcp": "node src/mcp-entry.js",
+    "build:web": "esbuild web/graph.js --bundle --format=iife --global-name=GardenGraph --outfile=web/graph.bundle.js --minify && esbuild web/graph-worker.js --bundle --format=iife --outfile=web/graph-worker.bundle.js --minify"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "d3-force": "^3.0.0",
+    "gray-matter": "^4.0.3",
+    "jsonc-parser": "^3.3.1",
+    "marked": "^15.0.12",
+    "sanitize-html": "^2.17.0",
+    "smol-toml": "^1.9.1",
+    "zod": "^4.6.7",
+    "d3-quadtree": "^3.0.1"
+  },
+  "description": "Local Markdown knowledge garden with backlinks and agent interfaces",
+  "author": "Link Garden",
+  "main": "desktop/main.cjs",
+  "build": {
+    "appId": "local.linkgarden.desktop",
+    "productName": "Link Garden",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**/*",
+      "src/**/*",
+      "web/**/*",
+      "package.json",
+      "assets/**/*",
+      "!data/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "vault",
+        "to": "vault",
+        "filter": [
+          "*.md"
+        ]
+      },
+      {
+        "from": "skills",
+        "to": "skills",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "docs",
+        "to": "docs",
+        "filter": [
+          "*.md"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": true,
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false,
+      "artifactName": "Link-Garden-Setup-${version}.${ext}",
+      "include": "build/installer.nsh",
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "deleteAppDataOnUninstall": false,
+      "allowElevation": false,
+      "packElevateHelper": false,
+      "script": "build/local-installer.nsi"
+    },
+    "electronDist": "node_modules/electron/dist"
+  },
+  "devDependencies": {
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.0",
+    "esbuild": "^0.28.2"
+  }
+}

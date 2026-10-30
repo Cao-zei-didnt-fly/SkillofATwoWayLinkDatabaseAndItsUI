@@ -1,0 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import storage from '../src/paths.cjs';
+import {connectionConfig} from '../src/connection.js';
+const root=path.resolve('dist/connections');fs.mkdirSync(root,{recursive:true});
+const executable=process.argv[2]||path.resolve('dist/win-unpacked/Link Garden.exe');
+const vault=storage.localLayout({root:path.dirname(executable)}).vault;
+const data=connectionConfig({executable,vault,skill:path.resolve('skills/link-garden')});
+fs.writeFileSync(path.join(root,'codex.toml'),data.codex);fs.writeFileSync(path.join(root,'workbuddy.json'),data.workbuddy);
+console.log(root);
