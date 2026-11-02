@@ -8,7 +8,7 @@ export async function verifyMcp(manager){
  const transport=new StdioClientTransport({command:config.command,args:config.args,env:config.env,stderr:'pipe'});transport.stderr?.on('data',()=>{});
  try{
   await client.connect(transport,{timeout:120000});const {tools}=await client.listTools({}, {timeout:60000});
-  if(!['search_notes','read_note','catalog','create_note','update_note','neighbors','link_notes'].every(name=>tools.some(tool=>tool.name===name)))throw Error('MCP 工具不完整');
+  if(!['search_notes','read_note','catalog','create_note','update_note','delete_note','neighbors','link_notes','refresh_index'].every(name=>tools.some(tool=>tool.name===name)))throw Error('MCP 工具不完整');
   const response=await client.callTool({name:'catalog',arguments:{limit:1}},undefined,{timeout:120000});if(response.isError)throw Error('知识库无法读取，请检查目录权限');
   return {ok:true,toolCount:tools.length,checkedAt:new Date().toISOString(),message:'独立工具握手与只读检查通过；客户端加载状态待客户端确认。'};
  }finally{await client.close();}

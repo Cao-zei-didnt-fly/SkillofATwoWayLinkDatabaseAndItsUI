@@ -33,3 +33,23 @@ test('code samples do not create links or get rewritten',t=>{
  const s=setup(t);s.execute({action:'create',id:'a',title:'A',body:'`[[example]]`\n\n```md\n[[sample]]\n```\n\n[[real]]'});
  assert.deepEqual(s.graph().unresolved,[{source:'a',ref:'real'}]);assert.match(s.get('a').html,/\[\[example\]\]/);
 });
+test('deleting a note removes its file and incoming link markup while preserving labels and code',t=>{
+ const s=setup(t);
+ s.execute({action:'create',id:'a',title:'A',body:'开始 [[b]]、[[b|Bee]]、[[Beta]] 和 `[[b]]`\n\n```md\n[[b]]\n```\n\n[[missing]]'});
+ s.execute({action:'create',id:'b',title:'Beta',body:'来自 [[a|Alpha]]'});
+ s.execute({action:'create',id:'c',title:'C',body:'[[Beta]]'});
+ const result=s.execute({action:'delete',id:'b',version:s.get('b').version});
+ assert.equal(result.removedLinks,4);assert.deepEqual(result.updatedNotes.map(n=>n.id).sort(),['a','c']);
+ assert.ok(!fs.existsSync(s.file('b')));assert.throws(()=>s.execute({action:'read',id:'b'}),/not found/);
+ const a=s.get('a');assert.match(a.body,/开始 b、Bee、Beta/);assert.match(a.body,/`\[\[b\]\]`/);assert.match(a.body,/```md\n\[\[b\]\]\n```/);
+ assert.deepEqual(a.links,['missing']);assert.equal(s.get('c').body,'Beta');
+ assert.deepEqual(s.graph().unresolved,[{source:'a',ref:'missing'}]);assert.deepEqual(s.graph().edges,[]);
+});
+test('delete requires the current version and rejects missing or stale notes',t=>{
+ const s=setup(t);s.execute({action:'create',id:'a',title:'A',body:'v1'});const old=s.get('a').version;
+ s.execute({action:'update',id:'a',body:'v2',version:old});
+ assert.throws(()=>s.execute({action:'delete',id:'a',version:old}),/changed/);assert.ok(fs.existsSync(s.file('a')));
+ assert.throws(()=>s.execute({action:'delete',id:'missing'}),/not found/);
+ s.execute({action:'delete',id:'a',version:s.get('a').version});assert.ok(!fs.existsSync(s.file('a')));
+ assert.throws(()=>s.execute({action:'delete',id:'a'}),/not found/);
+});

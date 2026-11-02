@@ -18,6 +18,8 @@ app.on('browser-window-created',(_event,win)=>{
         if(!document.querySelector('#files .note'))throw Error('Notes did not render');
         const result=await window.linkGarden.execute({action:'create',id:'desktop-test',title:'Desktop test',body:'[[welcome]]'});
         if(!result.ok)throw Error(result.error);
+        const ref=await window.linkGarden.execute({action:'create',id:'desktop-ref',title:'Desktop ref',body:'[[desktop-test|Desktop test link]]'});
+        if(!ref.ok)throw Error(ref.error);
         const read=await window.linkGarden.execute({action:'read',id:'welcome'});
         if(!read.result.backlinks.some(n=>n.id==='desktop-test'))throw Error('IPC backlink failed');
         document.querySelector('[data-skin="violet"]').click();
@@ -35,13 +37,23 @@ app.on('browser-window-created',(_event,win)=>{
             canvas.dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));
             document.querySelector('#connect').click();await wait('#connection-dialog[open]');await wait('.agent-item');if(document.querySelectorAll('.agent-item').length!==7)throw Error('Missing client adapters');if(!document.querySelector('#guide-path').value.endsWith('REGISTER-MCP.md'))throw Error('Missing agent guide');if(!document.querySelector('#codex-config').value.includes('mcp-entry.js'))throw Error('MCP config export failed');document.querySelector('#close-connection').click();
             document.querySelector('[data-view="read"]').click();await wait('article h1');
+            document.querySelector('#guide').click();await wait('#guide-dialog[open]');if(!document.querySelector('#guide-dialog').textContent.includes('快捷键'))throw Error('Guide content missing');document.querySelector('#close-guide').click();
+            history.replaceState(null,'','#note/desktop-test');window.dispatchEvent(new HashChangeEvent('hashchange'));
+            for(let i=0;i<100&&document.querySelector('article h1')?.textContent!=='Desktop test';i++)await new Promise(r=>setTimeout(r,50));if(document.querySelector('article h1')?.textContent!=='Desktop test')throw Error('Delete target did not open');
+            document.querySelector('#delete-note').click();await wait('#delete-dialog[open]');if(!document.querySelector('#delete-info').textContent.includes('Desktop test'))throw Error('Delete confirmation missing');
+            document.querySelector('#confirm-delete').click();
+            for(let i=0;i<100&&(document.querySelector('#delete-dialog').open||!document.querySelector('#notice').textContent.includes('已删除'));i++)await new Promise(r=>setTimeout(r,50));
+            if(document.querySelector('#delete-dialog').open)throw Error('Delete dialog did not close');
+            const cleaned=await window.linkGarden.execute({action:'read',id:'desktop-ref'});if(cleaned.result.body!=='Desktop test link')throw Error('Incoming link was not cleaned');
+            const gone=await window.linkGarden.execute({action:'read',id:'desktop-test'});if(gone.ok)throw Error('Deleted note still readable');
+            const removeRef=await window.linkGarden.execute({action:'delete',id:'desktop-ref',version:cleaned.result.version});if(!removeRef.ok)throw Error(removeRef.error);
           })()`);
           await win.webContents.executeJavaScript(`(async()=>{document.querySelector('#connect').click();for(let i=0;i<100&&!document.querySelector('#connection-dialog').open;i++)await new Promise(r=>setTimeout(r,50));await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));})()`);
           fs.mkdirSync(path.join(__dirname,'../dist'),{recursive:true});
           fs.writeFileSync(path.join(__dirname,'../dist/agent-setup-preview.png'),(await win.webContents.capturePage()).toPNG());
           await win.webContents.executeJavaScript("document.querySelector('#close-connection').click()");
           fs.writeFileSync(path.join(__dirname,'../dist/desktop-preview.png'),(await win.webContents.capturePage()).toPNG());
-          passed=true;console.log('PASS: desktop rendering, IPC writes/backlinks, skin persistence; closing window');win.close();
+          passed=true;console.log('PASS: desktop rendering, guide, IPC writes/backlinks, delete cleanup, skin persistence; closing window');win.close();
         }catch(error){console.error(error);app.exit(1);}
       });
       win.webContents.reload();

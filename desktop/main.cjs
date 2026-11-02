@@ -52,8 +52,9 @@ else {
     });
     window = new BrowserWindow({width:1250,height:850,minWidth:760,minHeight:540,show:false,title:'Link Garden',icon:path.join(__dirname,'../assets/icon.png'),backgroundColor:'#f5f6f2',webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
     window.setMenu(null);
-    window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-    window.webContents.on('will-navigate',event=>event.preventDefault());
+    const openExternal=url=>{try{const parsed=new URL(url);if(['http:','https:','mailto:'].includes(parsed.protocol))void shell.openExternal(url).catch(()=>{});}catch{}};
+    window.webContents.setWindowOpenHandler(({url})=>{openExternal(url);return {action:'deny'};});
+    window.webContents.on('will-navigate',(event,url)=>{const current=window.webContents.getURL();try{const from=new URL(current),to=new URL(url);if(from.protocol===to.protocol&&from.host===to.host&&from.pathname===to.pathname)return;}catch{}if(url===current)return;event.preventDefault();openExternal(url);});
     window.once('ready-to-show',()=>window.show());
     window.on('closed',()=>{window=null;});
     await window.loadFile(path.join(__dirname,'../web/index.html'));

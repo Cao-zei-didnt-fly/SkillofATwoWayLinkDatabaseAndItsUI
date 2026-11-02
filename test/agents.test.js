@@ -44,7 +44,7 @@ test('a failed multi-file commit rolls back earlier writes',t=>{
 });
 test('setup checks the actual MCP runtime and registers only detected clients',{timeout:20000},async t=>{
  const {options}=setup(t),manager=new AgentManager({...options,executable:process.execPath,entry:path.resolve('src/mcp-entry.js')});enable(manager.client('codex'));
- const result=await installAgents(manager,['codex','cursor']);assert.equal(result.verification.toolCount,8);assert.equal(result.results[0].status,'registered');assert.equal(result.results[1].status,'missing');
+ const result=await installAgents(manager,['codex','cursor']);assert.equal(result.verification.toolCount,9);assert.equal(result.results[0].status,'registered');assert.equal(result.results[1].status,'missing');
  assert.ok(!fs.existsSync(manager.client('cursor').config));assert.equal((await verifyMcp(manager)).ok,true);
 });
 

@@ -17,6 +17,69 @@ function links(body) {
  }};
  walk(marked.lexer(body));return [...new Set(result)];
 }
+const sha256=text=>crypto.createHash('sha256').update(text).digest('hex');
+function mergeRanges(ranges) {
+ const sorted=ranges.filter(([from,to])=>to>from).sort((a,b)=>a[0]-b[0]);
+ if(!sorted.length)return [];
+ const merged=[sorted[0]];
+ for(const range of sorted.slice(1)){
+  const last=merged[merged.length-1];
+  if(range[0]<=last[1])last[1]=Math.max(last[1],range[1]);
+  else merged.push(range);
+ }
+ return merged;
+}
+// Keep fenced blocks, inline code, HTML comments and <pre>/<code> content intact
+// while rewriting wikilinks. This mirrors the link parser's "code is not a link" rule.
+function codeRanges(body) {
+ const ranges=[];
+ const lines=body.split('\n');
+ let offset=0,fence=null;
+ for(const line of lines){
+  const start=offset;offset+=line.length+1;
+  if(fence){
+   const close=new RegExp('^ {0,3}'+fence.char+'{'+fence.len+',}\\s*$');
+   if(close.test(line)){ranges.push([fence.start,Math.min(start+line.length,body.length)]);fence=null;}
+   continue;
+  }
+  const open=/^ {0,3}(`{3,}|~{3,})/.exec(line);
+  if(open)fence={char:open[1][0],len:open[1].length,start};
+ }
+ if(fence)ranges.push([fence.start,body.length]);
+ const protectedAt=index=>ranges.some(([from,to])=>index>=from&&index<to);
+ for(let i=0;i<body.length;){
+  if(body[i]!=='`'||protectedAt(i)){i++;continue;}
+  let len=1;while(body[i+len]==='`')len++;
+  const token='`'.repeat(len);
+  let close=body.indexOf(token,i+len);
+  while(close>=0&&protectedAt(close))close=body.indexOf(token,close+len);
+  if(close>=0){ranges.push([i,close+len]);i=close+len;}
+  else i+=len;
+ }
+ const html=/<!--[\s\S]*?-->|<pre\b[^>]*>[\s\S]*?<\/pre>|<code\b[^>]*>[\s\S]*?<\/code>/gi;
+ for(const match of body.matchAll(html))if(!protectedAt(match.index))ranges.push([match.index,match.index+match[0].length]);
+ return mergeRanges(ranges);
+}
+function rewriteSegment(segment,replace) {
+ return segment.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g,(all,ref,label)=>replace(all,ref.trim(),label));
+}
+function stripLinksTo(body,targetId,resolve) {
+ let count=0;
+ const replace=(all,ref,label)=>{
+  let target;try{target=resolve(ref);}catch{return all;}
+  if(!target||target.id!==targetId)return all;
+  count++;
+  return label===undefined?ref:label;
+ };
+ const ranges=codeRanges(body);
+ let output='',position=0;
+ for(const [from,to] of ranges){
+  output+=rewriteSegment(body.slice(position,from),replace)+body.slice(from,to);
+  position=to;
+ }
+ output+=rewriteSegment(body.slice(position),replace);
+ return {body:output,count};
+}
 export class Store {
  constructor(root){this.root=path.resolve(root);fs.mkdirSync(this.root,{recursive:true});this.index=new NoteIndex(this.root,links);}
  close(){this.index.close();}
@@ -63,6 +126,54 @@ export class Store {
   }}]});html=sanitize(parser.parse(body));}
   return {...this.index.metadata(row),body,...(html!==undefined?{html}:{}),links:this.index.db.prepare('SELECT ref FROM refs WHERE source=? LIMIT 100').all(row.id).map(r=>r.ref),linksTotal:this.index.db.prepare('SELECT count(*) AS n FROM refs WHERE source=?').get(row.id).n,backlinks,startLine:start,startColumn:column,endLine:end,totalLines:fullLines.length,truncated:!!next,...(next?{next}:{})};
  }
+ writeFile(file,text){
+  const temp=file+'.'+crypto.randomUUID()+'.tmp';
+  try{fs.writeFileSync(temp,text,{flag:'wx'});fs.renameSync(temp,file);}
+  finally{if(fs.existsSync(temp))fs.unlinkSync(temp);}
+ }
+ remove(id,op={}){
+  this.index.sync();
+  const row=this.index.resolve(id);if(!row)throw Error('Note not found');
+  const file=this.file(row.id);
+  if(!fs.existsSync(file)||fs.lstatSync(file).isSymbolicLink())throw Error('Note not found or symlink notes are not supported');
+  const raw=fs.readFileSync(file,'utf8');
+  if(op.version&&sha256(raw)!==op.version)throw Error('Document changed; read before deleting');
+  // Clean incoming wikilinks before deleting the file. Labels are preserved as
+  // plain text; code samples are left untouched by stripLinksTo.
+  const sources=this.index.db.prepare('SELECT DISTINCT source FROM edges WHERE target=?').all(row.id).map(entry=>entry.source).filter(source=>source!==row.id);
+  const changes=[];
+  for(const sourceId of sources){
+   const sourceFile=this.file(sourceId);
+   if(!fs.existsSync(sourceFile)||fs.lstatSync(sourceFile).isSymbolicLink())continue;
+   const before=fs.readFileSync(sourceFile,'utf8');
+   const indexedVersion=this.index.db.prepare('SELECT version FROM notes WHERE id=?').get(sourceId)?.version;
+   if(indexedVersion&&sha256(before)!==indexedVersion)throw Error('Linked note changed; refresh before deleting: '+sourceId);
+   const parsed=matter(before);
+   const stripped=stripLinksTo(parsed.content,row.id,ref=>this.index.resolve(ref));
+   if(!stripped.count)continue;
+   // Preserve the original frontmatter bytes (comments included) and replace only the body.
+   const prefix=before.endsWith(parsed.content)?before.slice(0,before.length-parsed.content.length):matter.stringify('',parsed.data);
+   const after=prefix+stripped.body;
+   changes.push({id:sourceId,before,after,count:stripped.count});
+  }
+  const applied=[];let deleted=false;
+  try{
+   for(const change of changes){this.writeFile(this.file(change.id),change.after);applied.push(change);}
+   if(sha256(fs.readFileSync(file,'utf8'))!==sha256(raw))throw Error('Document changed; read before deleting');
+   fs.unlinkSync(file);deleted=true;
+   this.index.transaction(()=>{
+    for(const change of changes)this.index.ingest(change.id+'.md');
+    this.index.ingest(row.id+'.md');
+   });
+  }catch(error){
+   let rollbackFailed=false;
+   for(const change of applied.reverse())try{this.writeFile(this.file(change.id),change.before);this.index.ingest(change.id+'.md');}catch{rollbackFailed=true;}
+   if(deleted)try{this.writeFile(file,raw);this.index.ingest(row.id+'.md');}catch{rollbackFailed=true;}
+   throw Error(error.message+(rollbackFailed?'；部分文件已改动，请检查备份。':'；本次删除已回滚。'));
+  }
+  const updatedNotes=changes.map(change=>this.index.metadata(this.index.resolve(change.id))).filter(Boolean).map(note=>({id:note.id,title:note.title}));
+  return {id:row.id,title:row.title,removedLinks:changes.reduce((total,change)=>total+change.count,0),updatedNotes};
+ }
  execute(op){
   if(!op||typeof op!=='object')throw Error('Expected an operation object');
   if(op.action==='reindex')return this.index.sync(true);
@@ -71,6 +182,7 @@ export class Store {
   if(op.action==='search'||op.action==='list')return this.index.search(op);
   if(op.action==='graph')return this.graph(op);
   if(op.action==='read')return this.get(op.id,op);
+  if(op.action==='delete')return this.remove(op.id,op);
   if(op.action==='neighbors')return this.neighbors(op.id,op);
   if(!['create','update','link'].includes(op.action))throw Error('Unknown action');
   return this.index.transaction(()=>{
@@ -93,8 +205,8 @@ export class Store {
    data.tags||=[];data.category||='收件箱';data.status||='待整理';
    if(data.category.includes('/')||data.category.includes('\\'))throw Error('Use one category level');
    if(op.body!==undefined&&typeof op.body!=='string')throw Error('body must be a string');
-   data.updated=new Date().toISOString();const temp=file+'.'+crypto.randomUUID()+'.tmp';
-   try{fs.writeFileSync(temp,matter.stringify(op.body??previous.content,data),{flag:'wx'});fs.renameSync(temp,file);}finally{if(fs.existsSync(temp))fs.unlinkSync(temp);}
+   data.updated=new Date().toISOString();
+   this.writeFile(file,matter.stringify(op.body??previous.content,data));
    this.index.ingest(id+'.md');return {...this.index.metadata(this.index.resolve(id)),body:op.body??previous.content};
   });
  }

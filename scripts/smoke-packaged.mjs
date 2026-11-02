@@ -12,7 +12,7 @@ try{
   transport.stderr?.on('data',chunk=>process.stderr.write(chunk));await client.connect(transport);clients.push(client);
  }
  const call=async(client,name,args={})=>{const response=await client.callTool({name,arguments:args});assert.ok(!response.isError,response.content?.[0]?.text);return response.structuredContent;};
- assert.equal((await clients[0].listTools()).tools.length,8);
+ assert.equal((await clients[0].listTools()).tools.length,9);
  const note=await call(clients[0],'create_note',{id:'shared',title:'打包版本验证',body:'第一行\n中文检索来自正文\n第三行',tags:['验证']});
  await call(clients[1],'refresh_index');const results=await call(clients[1],'search_notes',{query:'中文检索'});assert.equal(results.items[0].id,'shared');assert.equal(results.items[0].matches[0].line,2);
  assert.equal((await call(clients[1],'read_note',{id:'shared',version:note.version,startLine:2,maxLines:1})).body,'中文检索来自正文');

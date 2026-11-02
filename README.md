@@ -1,6 +1,6 @@
 # Link Garden
 <img width="1920" height="1032" alt="image" src="https://github.com/user-attachments/assets/eebc7747-f216-44af-b48e-7e5c8422b763" />
-本地 Markdown 双向链接知识库，提供 Windows 桌面 UI 和面向 Codex、WorkBuddy 的 MCP 工具。分类仅一层，标签扁平，不使用 embedding，也不生成摘要。
+本地 Markdown 双向链接知识库，提供 Windows 桌面 UI 和面向本地 Agent 的 MCP 工具。分类仅一层，标签扁平，不使用 embedding，也不生成摘要。
 
 [下载 Windows 安装包与 PDF 教程](https://github.com/Cao-zei-didnt-fly/SkillofATwoWayLinkDatabaseAndItsUI/releases/latest)
 
@@ -10,9 +10,9 @@
 
 本包面向 Windows 10/11 x64，使用支持 Windows 10 及以上的 Electron 运行时；已在本机 Windows 11 验证，尚未做 Windows 10 实机测试。
 
-应用不注册开机启动，不使用托盘，关闭窗口即退出 UI 进程。右上角可切换五种标志色并保存选择。首次启动将随程序附带的初始笔记复制到 `<安装目录>/data/vault`；升级不覆盖此目录。`LINK_GARDEN_VAULT` 可指定其他库。
+应用不注册开机启动，不使用托盘，关闭窗口即退出 UI 进程。右上角可切换五种标志色并保存选择。首次启动将随程序附带的初始笔记（欢迎页、界面速览、Agent 接口）复制到 `<安装目录>/data/vault`；升级不覆盖此目录。`LINK_GARDEN_VAULT` 可指定其他库。
 
-UI 包含文件列表、全文搜索、片段预览、分页、分类/标签筛选、Markdown 阅读编辑、反向链接与状态看板。动态网络的 D3 力导向布局在 Web Worker 后台计算，拖动时暂停物理运算，Canvas 批量绘制并合并渲染请求。支持节点斥力、碰撞分离、节点拖动、背景平移、滚轮缩放、适应视野、暂停/恢复、悬停标题和点击阅读。方向键平移、加减号缩放、0 重置；下拉框可定位和打开节点。网络默认展示筛选结果的前 1000 个节点，大库可通过正文搜索、分类和标签缩小范围。
+UI 包含文件列表、全文搜索、片段预览、分页、分类/标签筛选、Markdown 阅读编辑、反向链接、删除笔记与状态看板。右上角“使用指南”提供按钮说明、快捷键和首次使用步骤；默认库附带入门笔记与界面速览。删除笔记会移除 Markdown 文件，并把其他笔记中指向它的 `[[链接]]` 清理为显示文字；代码示例不会被改写。动态网络的 D3 力导向布局在 Web Worker 后台计算，拖动时暂停物理运算，Canvas 批量绘制并合并渲染请求。支持节点斥力、碰撞分离、节点拖动、背景平移、滚轮缩放、适应视野、暂停/恢复、悬停标题和点击阅读。方向键平移、加减号缩放、0 重置；下拉框可定位和打开节点。网络默认展示筛选结果的前 1000 个节点，大库可通过正文搜索、分类和标签缩小范围。
 
 ## 必做：由 Agent 自行全局注册并核验信任
 
@@ -41,6 +41,7 @@ MCP 仍采用本地 stdio，使用 exe 自带的 Node 运行模式（ELECTRON_RU
 | `create_note` | 创建 Markdown 笔记 |
 | `update_note` | 携带版本更新，防止覆盖并发修改 |
 | `link_notes` | 为已存在的两篇笔记创建显式链接 |
+| `delete_note` | 携带当前版本永久删除笔记；同时清理其他笔记中指向它的链接，保留显示文字 |
 | `refresh_index` | 扫描元数据并增量更新变动文件 |
 
 例：先调用 `search_notes({query:"登录 失败",limit:10})`，根据命中片段选择文档，再调用 `read_note({id:"auth",version:"返回的版本",startLine:80,maxLines:30})`。未知标签不妨碍正文搜索。
@@ -55,7 +56,7 @@ MCP 仍采用本地 stdio，使用 exe 自带的 Node 运行模式（ELECTRON_RU
 
 `.link-garden/index.sqlite` 保存全文倒排索引与元数据缓存，可以在关闭所有访问进程后删除整个 `.link-garden` 目录，下次启动会从 Markdown 重建。索引通过文件通知和元数据检查更新，仅重新解析变更文件；点击 UI 的刷新或调用 `refresh_index` 可立即扫描。SQLite WAL 支持多个客户端共享索引，写操作串行，Markdown 使用临时文件原子替换；版本号是文件内容的 SHA-256，MCP 更新必须携带版本。
 
-外部编辑器不参与版本检查，仍可能覆盖别的进程的写入，建议定期备份。当前只读取库根目录的 Markdown，不递归文件夹，也未实现附件管理。索引扫描仍随文件数量增长，不承诺任意规模的固定响应时间。
+外部编辑器不参与版本检查，仍可能覆盖别的进程的写入，建议定期备份。当前只读取库根目录的 Markdown，不递归文件夹，也未实现附件管理；Markdown 中的 `<img>` 会被安全过滤，不加载远程图片，避免不可控的网络请求。桌面版的外部 `http(s)` / `mailto:` 链接交给系统浏览器或邮件客户端打开。索引扫描仍随文件数量增长，不承诺任意规模的固定响应时间。
 
 ## 开发与测试
 
@@ -65,8 +66,8 @@ MCP 仍采用本地 stdio，使用 exe 自带的 Node 运行模式（ELECTRON_RU
 npm install
 npm start              # 网页开发版 http://127.0.0.1:4317
 npm run desktop        # 桌面开发版
-npm test               # 存储、全文搜索、版本冲突、MCP 端到端测试
-npm run test:desktop   # 实际桌面渲染、配色、网络交互验证
+npm test               # 存储、全文搜索、版本冲突、删除链接清理、MCP 端到端测试
+npm run test:desktop   # 实际桌面渲染、配色、网络、使用指南与删除清理验证
 npm run build:win      # 生成离线前端与 Windows 安装包
 node scripts/export-connections.mjs
 powershell -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1
