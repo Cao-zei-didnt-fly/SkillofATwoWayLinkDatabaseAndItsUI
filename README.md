@@ -1,5 +1,5 @@
 # Link Garden
-
+<img width="1920" height="1032" alt="image" src="https://github.com/user-attachments/assets/eebc7747-f216-44af-b48e-7e5c8422b763" />
 本地 Markdown 双向链接知识库，提供 Windows 桌面 UI 和面向 Codex、WorkBuddy 的 MCP 工具。分类仅一层，标签扁平，不使用 embedding，也不生成摘要。
 
 [下载 Windows 安装包与 PDF 教程](https://github.com/Cao-zei-didnt-fly/SkillofATwoWayLinkDatabaseAndItsUI/releases/latest)
@@ -89,3 +89,4 @@ powershell -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1
 默认安装 D:\Link Garden；无 D 盘时 C:\Link Garden。笔记和索引位于 data/vault，界面设置和缓存位于 data/profile，接入指南位于 data/integrations，日志、崩溃记录与运行临时文件也在 data。右上角“数据目录”可打开实际目录。没有写入权限会明确报错，不会悄悄回退 AppData。可用 LINK_GARDEN_DATA_DIR 指定数据根目录，LINK_GARDEN_VAULT 单独指定库。
 
 升级与卸载保留 data。首次启动会复制旧 %APPDATA%/Link Garden 的笔记与设置，不覆盖不同内容的同名文件；迁移记录见 data/.layout.json。原件仍保留，确认迁移完整后可自行清理旧目录。安装程序不再往 LocalAppData 留完整安装包副本。Agent 的用户级全局 MCP/skill 配置、Windows 快捷方式和注册表仍使用系统或客户端规定的位置；不能承诺系统零写入。移动或改装目录后，重新让 Agent 按新指南核验全局路径。
+
